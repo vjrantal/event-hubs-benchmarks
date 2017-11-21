@@ -1,0 +1,6 @@
+python-qpid-proton
+lxml
+beautifulsoup4
+azure
+applicationinsights
+git+https://github.com/CatalystCode/azure-event-hubs-python.git@63ae7844fa8650c78ed3a4e6beef8e8c780d4ad4

@@ -1,0 +1,28 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: eph
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        run: eph
+        app: eph
+    spec:
+      containers:
+      - name: eph
+        image: vjrantal/eph-python:latest
+        imagePullPolicy: Always
+#        resources:
+#          requests:
+#            cpu: "900m"
+#          limits:
+#            cpu: "900m"
+        env:
+        - name: STORAGE_CONNECTION_STRING
+          value: $STORAGE_CONNECTION_STRING
+        - name: EVENT_HUB_CONNECTION_STRING
+          value: $EVENT_HUB_CONNECTION_STRING
+        - name: INSTRUMENTATION_KEY
+          value: $INSTRUMENTATION_KEY
