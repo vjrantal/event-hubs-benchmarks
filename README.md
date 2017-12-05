@@ -18,6 +18,7 @@ export INSTRUMENTATION_KEY=<application-insights-instrumentation-key>
 Install requirements:
 
 ```
+pip3 install python-qpid-proton
 pip3 install -r requirements.txt
 ```
 

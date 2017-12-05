@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: eph
 spec:
-  replicas: 1
+  replicas: 4
   template:
     metadata:
       labels:
@@ -14,11 +14,11 @@ spec:
       - name: eph
         image: vjrantal/eph-python:latest
         imagePullPolicy: Always
-#        resources:
-#          requests:
-#            cpu: "900m"
-#          limits:
-#            cpu: "900m"
+        resources:
+          requests:
+            cpu: "900m"
+          limits:
+            cpu: "900m"
         env:
         - name: STORAGE_CONNECTION_STRING
           value: $STORAGE_CONNECTION_STRING

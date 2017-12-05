@@ -8,41 +8,23 @@ import sys
 import asyncio
 import time
 import urllib
-import hmac
-import hashlib
-import base64
 import platform
-from eventhubsprocessor.abstract_event_processor import AbstractEventProcessor
-from eventhubsprocessor.azure_storage_checkpoint_manager import AzureStorageCheckpointLeaseManager
-from eventhubsprocessor.eph import EventProcessorHost, EPHOptions
+from eventprocessorhost.abstract_event_processor import AbstractEventProcessor
+from eventprocessorhost.azure_storage_checkpoint_manager import AzureStorageCheckpointLeaseManager
+from eventprocessorhost.eh_config import EventHubConfig
+from eventprocessorhost.eph import EventProcessorHost
 import applicationinsights
-
-TELEMETRY_CLIENT = None
-INSTRUMENTATION_KEY = os.environ.get("INSTRUMENTATION_KEY")
-if INSTRUMENTATION_KEY:
-    TELEMETRY_CONTEXT = applicationinsights.channel.TelemetryContext()
-    TELEMETRY_CONTEXT.instrumentation_key = INSTRUMENTATION_KEY
-    TELEMETRY_CONTEXT.session = platform.node()
-    TELEMETRY_CHANNEL = applicationinsights.channel.TelemetryChannel(
-        TELEMETRY_CONTEXT,
-        applicationinsights.channel.AsynchronousQueue(
-            applicationinsights.channel.AsynchronousSender())
-    )
-    TELEMETRY_CLIENT = applicationinsights.TelemetryClient(INSTRUMENTATION_KEY, TELEMETRY_CHANNEL)
-    # flush telemetry every 5 seconds (assuming we don't hit max_queue_item_count first)
-    #TELEMETRY_CLIENT.channel.sender.send_interval_in_milliseconds = 5 * 1000
-    # flush telemetry if we have 1000 or more telemetry items in our queue
-    #TELEMETRY_CLIENT.channel.sender.max_queue_item_count = 1000
 
 class EventProcessor(AbstractEventProcessor):
     """
     EventProcessor that logs metrics to Application Insights
     """
-    def __init__(self):
+    def __init__(self, params):
         """
         Init Event processor
         """
         super().__init__()
+        self.telemetry_client = params[0]
         self.checkpoint_interval = 10
         self.previous_checkpoint = time.time()
         self.counter = 0
@@ -73,9 +55,9 @@ class EventProcessor(AbstractEventProcessor):
                          context.partition_id, events_per_second)
             self.counter = 0
             self.previous_checkpoint = time.time()
-            if TELEMETRY_CLIENT:
-                TELEMETRY_CLIENT.track_metric(platform.node(), events_per_second)
-                TELEMETRY_CLIENT.flush()
+            if self.telemetry_client:
+                self.telemetry_client.track_metric(platform.node(), events_per_second)
+                self.telemetry_client.flush()
             await context.checkpoint_async()
 
     async def process_events_async(self, context, messages):
@@ -98,24 +80,6 @@ class EventProcessor(AbstractEventProcessor):
         """
         logging.error("Event Processor Error %s ", repr(error))
 
-def generate_eh_rest_credentials(sb_name, eh_name, key_name, sas_token):
-    """
-    Returns an auth token dictionary for making calls to eventhub
-    REST API.
-    """
-    uri = urllib.parse.quote_plus("https://{}.servicebus.windows.net/{}" \
-                                  .format(sb_name, eh_name))
-    sas = sas_token.encode("utf-8")
-    expiry = str(int(time.time() + 10000))
-    string_to_sign = (uri + "\n" + expiry).encode("utf-8")
-    signed_hmac_sha256 = hmac.HMAC(sas, string_to_sign, hashlib.sha256)
-    signature = urllib.parse.quote(base64.b64encode(signed_hmac_sha256.digest()))
-    return  {"sb_name": sb_name,
-             "eh_name": eh_name,
-             "token":"SharedAccessSignature sr={}&sig={}&se={}&skn={}" \
-                     .format(uri, signature, expiry, key_name)
-            }
-
 # Configure Logging
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
@@ -125,6 +89,23 @@ FORMATTER = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 STREAM_HANDLER = logging.StreamHandler(stream=sys.stdout)
 STREAM_HANDLER.setFormatter(FORMATTER)
 LOGGER.addHandler(STREAM_HANDLER)
+
+TELEMETRY_CLIENT = None
+INSTRUMENTATION_KEY = os.environ.get("INSTRUMENTATION_KEY")
+if INSTRUMENTATION_KEY:
+    TELEMETRY_CONTEXT = applicationinsights.channel.TelemetryContext()
+    TELEMETRY_CONTEXT.instrumentation_key = INSTRUMENTATION_KEY
+    TELEMETRY_CONTEXT.session = platform.node()
+    TELEMETRY_CHANNEL = applicationinsights.channel.TelemetryChannel(
+        TELEMETRY_CONTEXT,
+        applicationinsights.channel.AsynchronousQueue(
+            applicationinsights.channel.AsynchronousSender())
+    )
+    TELEMETRY_CLIENT = applicationinsights.TelemetryClient(INSTRUMENTATION_KEY, TELEMETRY_CHANNEL)
+    # flush telemetry every 5 seconds (assuming we don't hit max_queue_item_count first)
+    #TELEMETRY_CLIENT.channel.sender.send_interval_in_milliseconds = 5 * 1000
+    # flush telemetry if we have 1000 or more telemetry items in our queue
+    #TELEMETRY_CLIENT.channel.sender.max_queue_item_count = 1000
 
 STORAGE_CONNECTION_STRING = os.environ.get("STORAGE_CONNECTION_STRING")
 if not STORAGE_CONNECTION_STRING:
@@ -146,24 +127,15 @@ CONSUMER_GROUP = "$Default"
 POLICY_NAME = EVENT_HUB["SharedAccessKeyName"]
 POLICY_KEY = EVENT_HUB["SharedAccessKey"]
 
-ADDRESS = "amqps://{}:{}@{}.servicebus.windows.net:5671/{}" \
-          .format(POLICY_NAME, urllib.parse.quote_plus(POLICY_KEY), NAMESPACE, ENTITY)
-
-# Generate Auth credentials for EH Rest API (Used to list of partitions)
-EH_REST_CREDENTIALS = generate_eh_rest_credentials(NAMESPACE,
-                                                   ENTITY,
-                                                   POLICY_NAME,
-                                                   POLICY_KEY)
-
-STORAGE_MANAGER = AzureStorageCheckpointLeaseManager(STORAGE_ACCOUNT_NAME, STORAGE_KEY,
+EH_CONFIG = EventHubConfig(NAMESPACE, ENTITY, POLICY_NAME,
+                           POLICY_KEY,
+                           CONSUMER_GROUP)
+STORAGE_MANAGER = AzureStorageCheckpointLeaseManager(STORAGE_ACCOUNT_NAME,
+                                                     STORAGE_KEY,
                                                      LEASE_CONTAINER_NAME)
 
-EPH_OPTIONS = EPHOptions()
-EPH_OPTIONS.max_batch_size = 500
-
 LOOP = asyncio.get_event_loop()
-HOST = EventProcessorHost(EventProcessor, ADDRESS, CONSUMER_GROUP,
-                          STORAGE_MANAGER, EH_REST_CREDENTIALS,
-                          eh_options=EPH_OPTIONS, loop=LOOP)
+HOST = EventProcessorHost(EventProcessor, EH_CONFIG, STORAGE_MANAGER,
+                          ep_params=[TELEMETRY_CLIENT], loop=LOOP)
 LOOP.run_until_complete(HOST.open_async())
 LOOP.run_until_complete(HOST.close_async())
