@@ -56,7 +56,8 @@ class EventProcessor(AbstractEventProcessor):
             self.counter = 0
             self.previous_checkpoint = time.time()
             if self.telemetry_client:
-                self.telemetry_client.track_metric(platform.node(), events_per_second)
+                self.telemetry_client.track_metric(platform.node(), events_per_second,
+                                                   properties={'p': context.partition_id})
                 self.telemetry_client.flush()
             await context.checkpoint_async()
 
@@ -93,19 +94,12 @@ LOGGER.addHandler(STREAM_HANDLER)
 TELEMETRY_CLIENT = None
 INSTRUMENTATION_KEY = os.environ.get("INSTRUMENTATION_KEY")
 if INSTRUMENTATION_KEY:
-    TELEMETRY_CONTEXT = applicationinsights.channel.TelemetryContext()
-    TELEMETRY_CONTEXT.instrumentation_key = INSTRUMENTATION_KEY
-    TELEMETRY_CONTEXT.session = platform.node()
     TELEMETRY_CHANNEL = applicationinsights.channel.TelemetryChannel(
-        TELEMETRY_CONTEXT,
+        None,
         applicationinsights.channel.AsynchronousQueue(
             applicationinsights.channel.AsynchronousSender())
     )
     TELEMETRY_CLIENT = applicationinsights.TelemetryClient(INSTRUMENTATION_KEY, TELEMETRY_CHANNEL)
-    # flush telemetry every 5 seconds (assuming we don't hit max_queue_item_count first)
-    #TELEMETRY_CLIENT.channel.sender.send_interval_in_milliseconds = 5 * 1000
-    # flush telemetry if we have 1000 or more telemetry items in our queue
-    #TELEMETRY_CLIENT.channel.sender.max_queue_item_count = 1000
 
 STORAGE_CONNECTION_STRING = os.environ.get("STORAGE_CONNECTION_STRING")
 if not STORAGE_CONNECTION_STRING:
