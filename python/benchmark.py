@@ -109,7 +109,7 @@ STORAGE = dict(token.split("=", 1) for token in STORAGE_CONNECTION_STRING.split(
 # Storage Account Credentials
 STORAGE_ACCOUNT_NAME = STORAGE["AccountName"]
 STORAGE_KEY = STORAGE["AccountKey"]
-LEASE_CONTAINER_NAME = "leases"
+LEASE_CONTAINER_NAME = "python-leases"
 
 EVENT_HUB_CONNECTION_STRING = os.environ.get("EVENT_HUB_CONNECTION_STRING")
 if not EVENT_HUB_CONNECTION_STRING:

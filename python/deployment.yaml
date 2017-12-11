@@ -1,17 +1,17 @@
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: eph
+  name: eph-python
 spec:
   replicas: 4
   template:
     metadata:
       labels:
-        run: eph
-        app: eph
+        run: eph-python
+        app: eph-python
     spec:
       containers:
-      - name: eph
+      - name: eph-python
         image: vjrantal/eph-python:latest
         imagePullPolicy: Always
         resources:
